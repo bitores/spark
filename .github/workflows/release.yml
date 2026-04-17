@@ -54,7 +54,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            rust/build-lod/target
+            rust/target
           key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('rust/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-${{ matrix.target }}-cargo-
@@ -65,22 +65,23 @@ jobs:
 
           echo "Building for target: ${{ matrix.target }}"
 
+          cd rust
           cargo build --release \
             --target ${{ matrix.target }} \
-            --manifest-path rust/build-lod/Cargo.toml \
+            -p build-lod \
             --no-default-features
         shell: bash
 
       - name: Verify binary exists
         run: |
-          BINARY_PATH="rust/build-lod/target/${{ matrix.target }}/release/build-lod${{ matrix.ext }}"
+          BINARY_PATH="rust/target/${{ matrix.target }}/release/build-lod${{ matrix.ext }}"
 
           if [ ! -f "$BINARY_PATH" ]; then
             echo "ERROR: Binary not found at $BINARY_PATH"
             echo "Listing target directory contents:"
-            ls -la rust/build-lod/target/ || echo "target dir not found"
-            ls -la rust/build-lod/target/${{ matrix.target }}/ || echo "target/${{ matrix.target }} dir not found"
-            ls -la rust/build-lod/target/${{ matrix.target }}/release/ || echo "release dir not found"
+            ls -la rust/target/ || echo "target dir not found"
+            ls -la rust/target/${{ matrix.target }}/ || echo "target/${{ matrix.target }} dir not found"
+            ls -la rust/target/${{ matrix.target }}/release/ || echo "release dir not found"
             exit 1
           fi
 
@@ -90,7 +91,7 @@ jobs:
 
       - name: Create archive
         run: |
-          BINARY_PATH="rust/build-lod/target/${{ matrix.target }}/release/build-lod${{ matrix.ext }}"
+          BINARY_PATH="rust/target/${{ matrix.target }}/release/build-lod${{ matrix.ext }}"
           ARCHIVE_NAME="build-lod-${{ matrix.target }}"
           WORK_DIR="$(pwd)"
 
