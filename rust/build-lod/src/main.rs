@@ -399,33 +399,67 @@ fn process_file_lod_tsplat<TS: SplatReceiver + TsplatArray + SplatGetter>(filena
     }
 }
 
+fn show_help() {
+    println!("build-lod - Convert Gaussian Splatting files with LOD support");
+    println!();
+    println!("Usage: build-lod <input-file> [options]");
+    println!();
+    println!("Input formats: .ply, .compressed.ply, .spz, .splat, .ksplat, .sog, .rad");
+    println!("Output formats: .rad (default), .spz");
+    println!();
+    println!("Options:");
+    println!("  -h, --help              Show this help message");
+    println!("  --unlod                 Remove LoD nodes with children from file");
+    println!("  --csplat                Use compact splat encoding");
+    println!("  --gsplat                Use higher-precision splat encoding (default)");
+    println!("  --quick                 Quick LoD method (tiny-lod, base 1.5)");
+    println!("  --quality               Quality LoD method (bhatt-lod, base 1.75) (default)");
+    println!("  --tiny-lod[=<base>]     Use tiny-lod with custom base (default 1.5)");
+    println!("  --bhatt-lod[=<base>]    Use bhatt-lod with custom base (default 1.75)");
+    println!("  --max-sh=<degree>       Maximum SH degree (0-3, default 3)");
+    println!("  --rad                   Output RAD format (default)");
+    println!("  --rad-chunked           Output chunked RAD files");
+    println!("  --spz                   Output SPZ format");
+    println!("  --spz-chunked           Output chunked SPZ files");
+    println!("  --min-box=<x>,<y>,<z>   Crop to minimum bounding coord");
+    println!("  --max-box=<x>,<y>,<z>   Crop to maximum bounding coord");
+    println!("  --within-dist=<x>,<y>,<z>,<radius>  Crop to within radius of point");
+    println!("  --skip-validate         Skip validation of input file");
+    println!("  --inflate               Inflate scales for normal opacity range");
+    println!("  --cluster-sh[=<iterations>]        Cluster SH coefficients (default 10)");
+    println!("  --cluster-sh-cpu[=<iterations>]    Cluster SH using CPU");
+    println!("  --cluster-sh-f16[=<option>]        SH float16 mode (auto/true/false)");
+    println!();
+    println!("Examples:");
+    println!("  build-lod scene.ply                  # PLY to RAD");
+    println!("  build-lod scene.splat                # SPLAT to RAD");
+    println!("  build-lod --spz scene.spz            # SPZ to SPZ with LOD");
+    println!("  build-lod --quick --max-sh=1 scene.ply");
+    println!("  build-lod --cluster-sh=20 scene.ply  # Smaller file size");
+    std::process::exit(0);
+}
+
 fn show_usage_exit() {
-    eprintln!("Usage: build-lod");
-    eprintln!("  [--unlod]                                       // Remove LoD nodes with children from file");
-    eprintln!("  [--csplat] [--gsplat]                           // Use compact (csplat) or higher-precision (default gsplat) splat encoding");
-    eprintln!("  [--quick] [--quality]                           // Use quick (tiny-lod) or quality (bhatt-lod) LoD method (default quality)");
-    eprintln!("  [--tiny-lod[=<base>]] [--bhatt-lod[=<base>]]    // Use tiny-lod (default base 1.5) or bhatt-lod (default base 1.75) LoD method");
-    eprintln!("  [--max-sh=<max-sh>]                             // Set maximum SH degree (default 3)");
-    eprintln!("  [--rad] [--rad-chunked] [--spz] [--spz-chunked] // Output RAD (+chunked) or SPZ (+chunked) output files");
-    eprintln!("  [--min-box=<x>,<y>,<z>]                         // Crop input file to minimum bounding coord");
-    eprintln!("  [--max-box=<x>,<y>,<z>]                         // Crop input file to maximum bounding coord");
-    eprintln!("  [--within-dist=<x>,<y>,<z>,<radius>]            // Crop input file to within radius of a point");
-    eprintln!("  [--skip-validate]                               // Skip validation of input file");
-    eprintln!("  [--inflate]                                     // Inflate scales to output normal splat opacity 0..1");
-    eprintln!("  [--cluster-sh[=<iterations>]]                   // Cluster SH coefficients into <=64K codebook (default 10 iterations)");
-    eprintln!("  [--cluster-sh-cpu[=<iterations>]]               // Cluster SH coefficients using CPU");
-    eprintln!("  [--cluster-sh-f16[=auto,true,false]]            // Force GPU SH coefficients to use float16 (default if available)");
-    eprintln!("  <file.ply|file.spz|file.compressed.ply|file.splat|file.ksplat|file.sog|file.rad> [...] // Multiple input files and wildcards allowed");
+    eprintln!("Usage: build-lod <input-file> [options]");
+    eprintln!("Try 'build-lod --help' for more information.");
     std::process::exit(1);
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
+    // Handle help flags
+    if args.is_empty() || args.iter().any(|a| a == "-h" || a == "--help" || a == "help") {
+        show_help();
+    }
+
     let mut options = BuildLodOptions::default();
     let mut filenames = Vec::new();
 
     for arg in args {
+        if arg == "-h" || arg == "--help" || arg == "help" {
+            show_help();
+        }
         if arg == "--unlod" {
             options.unlod = true;
             println!("Using --unlod: Un-LoD file by removing nodes with children");

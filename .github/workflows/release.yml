@@ -17,19 +17,19 @@ jobs:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             ext: .exe
-            archive: zip
+            artifact: exe
           - target: x86_64-apple-darwin
             os: macos-13
             ext: ''
-            archive: tar
+            artifact: dmg
           - target: aarch64-apple-darwin
             os: macos-14
             ext: ''
-            archive: tar
+            artifact: dmg
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
             ext: ''
-            archive: tar
+            artifact: deb
 
     runs-on: ${{ matrix.os }}
     permissions:
@@ -58,9 +58,7 @@ jobs:
       - name: Build binary
         run: |
           set -e
-
           echo "Building for target: ${{ matrix.target }}"
-
           cd rust
           cargo build --release \
             --target ${{ matrix.target }} \
@@ -71,7 +69,6 @@ jobs:
       - name: Verify binary exists
         run: |
           BINARY_PATH="rust/target/${{ matrix.target }}/release/build-lod${{ matrix.ext }}"
-
           if [ ! -f "$BINARY_PATH" ]; then
             echo "ERROR: Binary not found at $BINARY_PATH"
             echo "Listing target directory contents:"
@@ -80,33 +77,98 @@ jobs:
             ls -la rust/target/${{ matrix.target }}/release/ || echo "release dir not found"
             exit 1
           fi
-
           echo "Binary found: $BINARY_PATH"
           ls -la "$BINARY_PATH"
         shell: bash
 
-      - name: Create archive
+      # Windows: 直接上传 exe
+      - name: Prepare Windows artifact
+        if: matrix.artifact == 'exe'
         run: |
-          BINARY_PATH="rust/target/${{ matrix.target }}/release/build-lod${{ matrix.ext }}"
-          ARCHIVE_NAME="build-lod-${{ matrix.target }}"
-          WORK_DIR="$(pwd)"
+          mkdir -p artifacts
+          cp rust/target/${{ matrix.target }}/release/build-lod.exe artifacts/build-lod-${{ matrix.target }}.exe
+          ls -la artifacts/
+        shell: bash
 
-          mkdir -p "$WORK_DIR/artifacts"
+      # macOS: 创建 dmg
+      - name: Install create-dmg
+        if: matrix.artifact == 'dmg'
+        run: brew install create-dmg
 
-          if [ "${{ matrix.archive }}" = "zip" ]; then
-            # Windows: use PowerShell Compress-Archive or 7z
-            if command -v 7z &> /dev/null; then
-              7z a "$WORK_DIR/artifacts/$ARCHIVE_NAME.zip" "$BINARY_PATH"
-            else
-              powershell -Command "Compress-Archive -Path '$BINARY_PATH' -DestinationPath '$WORK_DIR/artifacts/$ARCHIVE_NAME.zip'"
-            fi
-          else
-            # Unix: use tar
-            tar -czvf "$WORK_DIR/artifacts/$ARCHIVE_NAME.tar.gz" -C "$(dirname "$BINARY_PATH")" "$(basename "$BINARY_PATH")"
-          fi
+      - name: Create macOS dmg
+        if: matrix.artifact == 'dmg'
+        run: |
+          BINARY_PATH="rust/target/${{ matrix.target }}/release/build-lod"
+          DMG_NAME="build-lod-${{ matrix.target }}.dmg"
 
-          echo "Archive created:"
-          ls -la "$WORK_DIR/artifacts/"
+          mkdir -p artifacts
+
+          # Create a simple dmg with the binary
+          create-dmg \
+            --volname "build-lod" \
+            --volicon "none" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --app-drop-link 400 200 \
+            "$DMG_NAME" \
+            "$BINARY_PATH" || \
+          # Fallback: simple dmg using hdiutil
+          {
+            mkdir -p dmg_temp
+            cp "$BINARY_PATH" dmg_temp/
+            hdiutil create -volname "build-lod" \
+              -srcfolder dmg_temp \
+              -ov -format UDZO \
+              "$DMG_NAME"
+            rm -rf dmg_temp
+          }
+
+          mv "$DMG_NAME" artifacts/
+          ls -la artifacts/
+        shell: bash
+
+      # Linux: 创建 deb
+      - name: Install cargo-deb
+        if: matrix.artifact == 'deb'
+        run: cargo install cargo-deb
+
+      - name: Create Linux deb
+        if: matrix.artifact == 'deb'
+        run: |
+          mkdir -p artifacts
+
+          cd rust/build-lod
+
+          # Create deb package
+          cargo deb --target ${{ matrix.target }} --no-build --output ../artifacts/build-lod-${{ matrix.target }}.deb || \
+          # Fallback: manual deb creation
+          {
+            BINARY_PATH="../target/${{ matrix.target }}/release/build-lod"
+            DEB_DIR="deb_package"
+            DEB_NAME="build-lod-${{ matrix.target }}.deb"
+
+            mkdir -p "$DEB_DIR/usr/bin"
+            mkdir -p "$DEB_DIR/DEBIAN"
+
+            cp "$BINARY_PATH" "$DEB_DIR/usr/bin/build-lod"
+
+            echo "Package: build-lod
+Version: ${GITHUB_REF_NAME#v}
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: World Labs Technologies
+Description: PLY to RAD converter with LOD support
+" > "$DEB_DIR/DEBIAN/control"
+
+            dpkg-deb --build "$DEB_DIR" "$DEB_NAME"
+            mv "$DEB_NAME" ../artifacts/
+            rm -rf "$DEB_DIR"
+          }
+
+          cd ../..
+          ls -la artifacts/
         shell: bash
 
       - name: Upload to Release

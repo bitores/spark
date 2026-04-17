@@ -27,3 +27,15 @@ wgpu = { workspace = true, optional = true }
 pollster = { workspace = true, optional = true }
 bytemuck = { workspace = true, optional = true }
 half = { workspace = true, optional = true }
+
+# cargo-deb configuration for Linux package
+[package.metadata.deb]
+maintainer = "World Labs Technologies <noreply@sparkjs.dev>"
+copyright = "2024, World Labs Technologies"
+extended-description = "Convert PLY/SPZ/SPLAT files to RAD/SPZ format with LOD support"
+depends = ""
+section = "utility"
+priority = "optional"
+assets = [
+    ["target/release/build-lod", "usr/bin/build-lod", "755"],
+]
