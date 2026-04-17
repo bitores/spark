@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C \"d:/hzj-ws/claude-ws\" status)",
+      "Bash(git -C \"d:/hzj-ws/claude-ws\" diff --name-status)",
+      "Bash(git -C \"d:/hzj-ws/claude-ws\" log --oneline -5)"
+    ]
+  }
+}

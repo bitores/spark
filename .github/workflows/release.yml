@@ -91,10 +91,6 @@ jobs:
         shell: bash
 
       # macOS: 创建 dmg
-      - name: Install create-dmg
-        if: matrix.artifact == 'dmg'
-        run: brew install create-dmg
-
       - name: Create macOS dmg
         if: matrix.artifact == 'dmg'
         run: |
@@ -102,28 +98,18 @@ jobs:
           DMG_NAME="build-lod-${{ matrix.target }}.dmg"
 
           mkdir -p artifacts
+          mkdir -p dmg_temp
 
-          # Create a simple dmg with the binary
-          create-dmg \
-            --volname "build-lod" \
-            --volicon "none" \
-            --window-pos 200 120 \
-            --window-size 600 400 \
-            --icon-size 100 \
-            --app-drop-link 400 200 \
-            "$DMG_NAME" \
-            "$BINARY_PATH" || \
-          # Fallback: simple dmg using hdiutil
-          {
-            mkdir -p dmg_temp
-            cp "$BINARY_PATH" dmg_temp/
-            hdiutil create -volname "build-lod" \
-              -srcfolder dmg_temp \
-              -ov -format UDZO \
-              "$DMG_NAME"
-            rm -rf dmg_temp
-          }
+          # Copy binary to temp folder
+          cp "$BINARY_PATH" dmg_temp/build-lod
 
+          # Create dmg using hdiutil (more reliable)
+          hdiutil create -volname "build-lod" \
+            -srcfolder dmg_temp \
+            -ov -format UDZO \
+            "$DMG_NAME"
+
+          rm -rf dmg_temp
           mv "$DMG_NAME" artifacts/
           ls -la artifacts/
         shell: bash
