@@ -11,81 +11,151 @@ env:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-pc-windows-msvc
             os: windows-latest
             ext: .exe
+            archive: zip
           - target: x86_64-apple-darwin
             os: macos-13
             ext: ''
+            archive: tar
           - target: aarch64-apple-darwin
             os: macos-14
             ext: ''
+            archive: tar
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-22.04
             ext: ''
+            archive: tar
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-22.04
             use-cross: true
             ext: ''
+            archive: tar
 
     runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.82
           targets: ${{ matrix.target }}
 
-      - name: Install cross
-        if: matrix.use-cross
-        run: cargo install cross
-
-      - name: Build
+      - name: Install cross (for ARM Linux)
+        if: matrix.use-cross == true
         run: |
+          cargo install cross --git https://github.com/cross-rs/cross || {
+            echo "Failed to install cross, trying fallback..."
+            cargo install cross
+          }
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/build-lod/target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-
+
+      - name: Build binary
+        run: |
+          set -e  # Exit immediately on error
+
+          BUILD_CMD="cargo"
           if [ "${{ matrix.use-cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }} --manifest-path rust/build-lod/Cargo.toml --no-default-features
-          else
-            cargo build --release --target ${{ matrix.target }} --manifest-path rust/build-lod/Cargo.toml --no-default-features
+            BUILD_CMD="cross"
           fi
+
+          echo "Building with: $BUILD_CMD"
+          echo "Target: ${{ matrix.target }}"
+
+          $BUILD_CMD build --release \
+            --target ${{ matrix.target }} \
+            --manifest-path rust/build-lod/Cargo.toml \
+            --no-default-features
         shell: bash
 
-      - name: Package
+      - name: Verify binary exists
         run: |
-          cd rust/build-lod/target/${{ matrix.target }}/release
-          mkdir -p artifact
-          cp build-lod${{ matrix.ext }} artifact/
-          cd artifact
-          if [ "${{ matrix.target }}" = "x86_64-pc-windows-msvc" ]; then
-            7z a build-lod-${{ matrix.target }}.zip build-lod${{ matrix.ext }}
-          else
-            tar -czvf build-lod-${{ matrix.target }}.tar.gz build-lod${{ matrix.ext }}
+          BINARY_PATH="rust/build-lod/target/${{ matrix.target }}/release/build-lod${{ matrix.ext }}"
+
+          if [ ! -f "$BINARY_PATH" ]; then
+            echo "ERROR: Binary not found at $BINARY_PATH"
+            echo "Listing target directory contents:"
+            ls -la rust/build-lod/target/ || echo "target dir not found"
+            ls -la rust/build-lod/target/${{ matrix.target }}/ || echo "target/${{ matrix.target }} dir not found"
+            ls -la rust/build-lod/target/${{ matrix.target }}/release/ || echo "release dir not found"
+            exit 1
           fi
+
+          echo "Binary found: $BINARY_PATH"
+          ls -la "$BINARY_PATH"
+        shell: bash
+
+      - name: Create archive
+        run: |
+          BINARY_PATH="rust/build-lod/target/${{ matrix.target }}/release/build-lod${{ matrix.ext }}"
+          ARCHIVE_NAME="build-lod-${{ matrix.target }}"
+          WORK_DIR="$(pwd)"
+
+          mkdir -p "$WORK_DIR/artifacts"
+
+          if [ "${{ matrix.archive }}" = "zip" ]; then
+            # Windows: use PowerShell Compress-Archive or 7z
+            if command -v 7z &> /dev/null; then
+              7z a "$WORK_DIR/artifacts/$ARCHIVE_NAME.zip" "$BINARY_PATH"
+            else
+              powershell -Command "Compress-Archive -Path '$BINARY_PATH' -DestinationPath '$WORK_DIR/artifacts/$ARCHIVE_NAME.zip'"
+            fi
+          else
+            # Unix: use tar
+            tar -czvf "$WORK_DIR/artifacts/$ARCHIVE_NAME.tar.gz" -C "$(dirname "$BINARY_PATH")" "$(basename "$BINARY_PATH")"
+          fi
+
+          echo "Archive created:"
+          ls -la "$WORK_DIR/artifacts/"
         shell: bash
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: build-lod-${{ matrix.target }}
-          path: rust/build-lod/target/${{ matrix.target }}/release/artifact/*
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 1
 
   release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
         with:
           merge-multiple: true
-          path: artifacts
+          path: release-artifacts
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
+      - name: List release artifacts
+        run: |
+          echo "Artifacts to release:"
+          ls -la release-artifacts/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/*
+          files: release-artifacts/*
           generate_release_notes: true
+          fail-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
