@@ -30,11 +30,12 @@ jobs:
             os: ubuntu-22.04
             ext: ''
             archive: tar
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-22.04
-            use-cross: true
-            ext: ''
-            archive: tar
+          # ARM Linux disabled - cross compilation issues
+          # - target: aarch64-unknown-linux-gnu
+          #   os: ubuntu-22.04
+          #   use-cross: true
+          #   ext: ''
+          #   archive: tar
 
     runs-on: ${{ matrix.os }}
 
@@ -46,24 +47,6 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
-
-      - name: Install cross (for ARM Linux)
-        if: matrix.use-cross == true
-        run: |
-          # Verify Docker is available (cross requires Docker)
-          docker --version || { echo "Docker not available"; exit 1; }
-
-          # Download pre-built cross binary
-          CROSS_VERSION="0.2.5"
-          CROSS_URL="https://github.com/cross-rs/cross/releases/download/v${CROSS_VERSION}/cross-x86_64-unknown-linux-gnu.tar.gz"
-
-          echo "Downloading cross v${CROSS_VERSION}..."
-          curl -sSL "$CROSS_URL" | tar -xz -C ~/.cargo/bin
-
-          chmod +x ~/.cargo/bin/cross
-
-          echo "Cross installed successfully:"
-          ~/.cargo/bin/cross --version || echo "cross version check failed"
 
       - name: Cache cargo build
         uses: actions/cache@v4
@@ -78,17 +61,11 @@ jobs:
 
       - name: Build binary
         run: |
-          set -e  # Exit immediately on error
+          set -e
 
-          BUILD_CMD="cargo"
-          if [ "${{ matrix.use-cross }}" = "true" ]; then
-            BUILD_CMD="cross"
-          fi
+          echo "Building for target: ${{ matrix.target }}"
 
-          echo "Building with: $BUILD_CMD"
-          echo "Target: ${{ matrix.target }}"
-
-          $BUILD_CMD build --release \
+          cargo build --release \
             --target ${{ matrix.target }} \
             --manifest-path rust/build-lod/Cargo.toml \
             --no-default-features
