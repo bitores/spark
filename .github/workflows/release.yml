@@ -125,23 +125,21 @@ jobs:
           set -e
           mkdir -p artifacts
 
-          BINARY_PATH="rust/target/${{ matrix.target }}/release/build-lod"
-          DEB_NAME="build-lod-${{ matrix.target }}.deb"
+          cd rust
 
-          cd rust/build-lod
+          # Try cargo-deb
+          cargo deb --target ${{ matrix.target }} -p build-lod --no-build --output ../artifacts/build-lod-${{ matrix.target }}.deb || {
+            echo "cargo-deb failed, using manual deb creation"
 
-          # Try cargo-deb first
-          cargo deb --target ${{ matrix.target }} --no-build --output ../artifacts/$DEB_NAME && exit 0
+            BINARY_PATH="target/${{ matrix.target }}/release/build-lod"
+            DEB_DIR="deb_package"
 
-          # Fallback: manual deb creation
-          DEB_DIR="deb_package"
-          mkdir -p "$DEB_DIR/usr/bin"
-          mkdir -p "$DEB_DIR/DEBIAN"
+            mkdir -p "$DEB_DIR/usr/bin"
+            mkdir -p "$DEB_DIR/DEBIAN"
 
-          cp "$BINARY_PATH" "$DEB_DIR/usr/bin/build-lod"
+            cp "$BINARY_PATH" "$DEB_DIR/usr/bin/build-lod"
 
-          # Write control file
-          cat > "$DEB_DIR/DEBIAN/control" << 'EOF'
+            cat > "$DEB_DIR/DEBIAN/control" << 'EOF'
           Package: build-lod
           Version: 0.1.0
           Section: utils
@@ -151,10 +149,12 @@ jobs:
           Description: PLY to RAD converter with LOD support
           EOF
 
-          dpkg-deb --build "$DEB_DIR" "../artifacts/$DEB_NAME"
-          rm -rf "$DEB_DIR"
+            dpkg-deb --build "$DEB_DIR" "../artifacts/build-lod-${{ matrix.target }}.deb"
+            rm -rf "$DEB_DIR"
+          }
 
-          cd ../..
+          cd ..
+          echo "Artifacts:"
           ls -la artifacts/
         shell: bash
 
