@@ -5,10 +5,3 @@ passthrough = [
 
 [target.aarch64-unknown-linux-gnu]
 image = "ghcr.io/cross-rs/aarch64-unknown-linux-gnu:0.2.5"
-# Ensure required libraries are available
-pre-build = [
-    "apt-get update && apt-get install -y --no-install-recommends libpng-dev zlib1g-dev",
-]
-
-[target.aarch64-unknown-linux-gnu.build-std]
-build-std = false
