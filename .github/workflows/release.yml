@@ -122,36 +122,37 @@ jobs:
       - name: Create Linux deb
         if: matrix.artifact == 'deb'
         run: |
+          set -e
           mkdir -p artifacts
+
+          BINARY_PATH="rust/target/${{ matrix.target }}/release/build-lod"
+          DEB_NAME="build-lod-${{ matrix.target }}.deb"
 
           cd rust/build-lod
 
-          # Create deb package
-          cargo deb --target ${{ matrix.target }} --no-build --output ../artifacts/build-lod-${{ matrix.target }}.deb || \
+          # Try cargo-deb first
+          cargo deb --target ${{ matrix.target }} --no-build --output ../artifacts/$DEB_NAME && exit 0
+
           # Fallback: manual deb creation
-          {
-            BINARY_PATH="../target/${{ matrix.target }}/release/build-lod"
-            DEB_DIR="deb_package"
-            DEB_NAME="build-lod-${{ matrix.target }}.deb"
+          DEB_DIR="deb_package"
+          mkdir -p "$DEB_DIR/usr/bin"
+          mkdir -p "$DEB_DIR/DEBIAN"
 
-            mkdir -p "$DEB_DIR/usr/bin"
-            mkdir -p "$DEB_DIR/DEBIAN"
+          cp "$BINARY_PATH" "$DEB_DIR/usr/bin/build-lod"
 
-            cp "$BINARY_PATH" "$DEB_DIR/usr/bin/build-lod"
+          # Write control file
+          cat > "$DEB_DIR/DEBIAN/control" << 'EOF'
+          Package: build-lod
+          Version: 0.1.0
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: World Labs Technologies
+          Description: PLY to RAD converter with LOD support
+          EOF
 
-            echo "Package: build-lod
-Version: ${GITHUB_REF_NAME#v}
-Section: utils
-Priority: optional
-Architecture: amd64
-Maintainer: World Labs Technologies
-Description: PLY to RAD converter with LOD support
-" > "$DEB_DIR/DEBIAN/control"
-
-            dpkg-deb --build "$DEB_DIR" "$DEB_NAME"
-            mv "$DEB_NAME" ../artifacts/
-            rm -rf "$DEB_DIR"
-          }
+          dpkg-deb --build "$DEB_DIR" "../artifacts/$DEB_NAME"
+          rm -rf "$DEB_DIR"
 
           cd ../..
           ls -la artifacts/
