@@ -50,10 +50,20 @@ jobs:
       - name: Install cross (for ARM Linux)
         if: matrix.use-cross == true
         run: |
-          cargo install cross --git https://github.com/cross-rs/cross || {
-            echo "Failed to install cross, trying fallback..."
-            cargo install cross
-          }
+          # Verify Docker is available (cross requires Docker)
+          docker --version || { echo "Docker not available"; exit 1; }
+
+          # Download pre-built cross binary
+          CROSS_VERSION="0.2.5"
+          CROSS_URL="https://github.com/cross-rs/cross/releases/download/v${CROSS_VERSION}/cross-x86_64-unknown-linux-gnu.tar.gz"
+
+          echo "Downloading cross v${CROSS_VERSION}..."
+          curl -sSL "$CROSS_URL" | tar -xz -C ~/.cargo/bin
+
+          chmod +x ~/.cargo/bin/cross
+
+          echo "Cross installed successfully:"
+          ~/.cargo/bin/cross --version || echo "cross version check failed"
 
       - name: Cache cargo build
         uses: actions/cache@v4
